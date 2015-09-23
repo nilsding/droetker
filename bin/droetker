@@ -288,8 +288,8 @@ cmd_build() {
   fi
   
   dbg_echo "Building file lists"
-  dirs=` find -E . -type d -and -regex '(.?/[^_/]+[^/]+)*'`
-  files=`find -E . -type f -and -regex '(.?/[^_/]+[^/]+)*'`
+  dirs=` find -E . -type d -and -regex '(.?/[^_/]+[^/]+)*' -and -not -iwholename '*.git*'`
+  files=`find -E . -type f -and -regex '(.?/[^_/]+[^/]+)*' -and -not -iwholename '*.git*'`
   for dir in ${dirs}; do
     if [ ! -d "${OUTPUT_DIRECTORY}/${dir}" ]; then
       dbg_echo "Creating directory ${OUTPUT_DIRECTORY}/${dir}"
