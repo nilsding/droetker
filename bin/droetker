@@ -1,0 +1,377 @@
+#!/bin/sh
+# droetker - A static site generator
+# 
+# Copyright (c) 2015 Georg G. <nilsding@nilsding.org>
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+# ===== BEGIN Constants
+
+USAGE_STR="Usage: ${0##*/} [-dfh] COMMAND"
+OUTPUT_DIRECTORY=${OUTPUT_DIRECTORY:-"`pwd`/_site"}
+LAYOUT_DIRNAME="_layouts"
+INCLUDE_DIRNAME="_includes"
+TMP_PATH="/tmp/droetker_$$"
+
+# ===== END Constants
+# ===== BEGIN Templates
+
+TEMPLATE_CONFIG_SH="# droetker configuration file
+# All exported variables which start with SITE_ can be used anywhere on the
+# site.  For example, you can set the title tag to the site's title by adding
+# \`<title>\$SITE_NAME</title>' somewhere in the <head> section.
+export SITE_NAME=\"My awesome web site\"
+export SITE_DESCRIPTION=\"You should change the description.\"
+export SITE_BASEURL=\"\"  # the subpath of your site, e.g. /blog
+export SITE_URL=\"http://yourdomain.com\"
+"
+
+TEMPLATE_INDEX_HTML="---
+PAGE_LAYOUT=default.html
+---
+<h2>Hello world!</h2>
+<p>Looks like <tt>droetker</tt> actually works.  Nice.</p>
+"
+
+TEMPLATE_LAYOUTS_DEFAULT_HTML="<!doctype html>
+<html>
+<head>
+  <title>
+#ifdef \$PAGE_TITLE
+    \$PAGE_TITLE -
+#endif
+    \$SITE_NAME
+  </title>
+</head>
+<body>
+  #include \"header.html\"
+  #include \$CONTENT
+  #include \"footer.html\"
+</body>
+</html>
+"
+
+TEMPLATE_INCLUDES_HEADER_HTML="
+<h1><a href=\"/\$SITE_BASEURL\" style=\"text-decoration:none;color:black\">\$SITE_NAME</h1>
+<b>\$SITE_DESCRIPTION</b>
+"
+
+TEMPLATE_INCLUDES_FOOTER_HTML="<hr />
+(c) `date +%Y` \$SITE_NAME
+"
+
+# ===== END Templates
+# ===== BEGIN Functions we always want to have
+
+# Prints a message and exits with status 1.
+fail() {
+  echo " !!  $*"
+  exit 1
+}
+
+# Debug output.
+dbg_echo() {
+  [ "$DEBUG_OPT" ] && echo " ii  $*" >&2
+}
+
+# $1: colour (red|green|yellow|blue|magenta|cyan|white)
+# $2: text that should be coloured
+# $3: text
+say() {
+  case "$1" in
+    red)      color=31  ;;
+    green)    color=32  ;;
+    yellow)   color=33  ;;
+    blue)     color=34  ;;
+    magenta)  color=35  ;;
+    cyan)     color=36  ;;
+    white)    color=37  ;;
+    *)        color=0   ;;
+  esac
+  printf "\033[1;%dm%10s\033[0m %s\n" $color "$2" "$3"
+}
+
+# Displays an usage string.
+usage() {
+  echo "${USAGE_STR}"
+  echo "For help and a list of available commands, type: ${0##*/} help"
+  exit ${1:-1}
+}
+
+# $1: file name
+# $2: file content
+create_file() {
+  file_name="$1"
+  content="$2"
+  if [ -e "${file_name}" ]; then
+    if [ ! -n "${FORCE_OPT}" ]; then
+      say yellow "keep" "${file_name}"
+      return
+    else
+      say blue "overwrite" "${file_name}"
+    fi
+  else
+    say green "create" "${file_name}"
+  fi
+  echo "${content}" > "${file_name}"
+}
+
+# $1: file name
+read_front_matter() {
+  file_name="$1"
+
+  # check if the file has a front matter
+  if [ ! "`head -n1 "$1"`" = "---" ]; then
+    dbg_echo "==> $1 has no front matter"
+    return 1
+  fi
+
+  awk '
+    /---/ {
+      f = 1;
+      if (++d == 1) {
+        next;
+      }
+    }
+
+    d != 2 {
+      print;
+    }
+
+    f && d == 2 {
+      exit;
+    }' "${file_name}"
+}
+
+# reads the actual content and stores it to a temporary file
+# $1: file name
+read_content() {
+  file_name="$1"
+
+  awk '
+    /---/ {
+      f = 1;
+      if (++d < 3) {
+        next;
+      }
+    }
+
+    f && d < 2 {
+      next;
+    }
+
+    { print }' "${file_name}" > $TMP_PATH
+}
+
+site_defines() {
+  OLDIFS="${IFS}"
+  IFS="
+"
+  defines=""
+  for var in `export | grep "^SITE"`; do
+    val="`eval "echo $\"\${var}\""`"
+    defines="-D\$${var}=${val}
+${defines}"
+  done
+  
+  IFS="${OLDIFS}"
+  echo "${defines}"
+}
+
+# ===== END Functions we always want to have
+# ===== BEGIN Commands
+
+cmd_help() {
+  case "$1" in
+  "?")
+    echo "${USAGE_STR}"
+    echo "Global options supported:"
+    echo -e "\t-d\tDisplay additional information."
+    echo -e "\t-f\tForce stuff."
+    echo -e "\t-h\tDisplay basic usage info."
+    echo ""
+    echo "Commands supported:"
+    echo -e "\thelp\tDisplay this help text."
+    echo -e "\tnew\tCreate a new website scaffold."
+    echo -e "\tbuild\tBuild the website to \$OUTPUT_DIRECTORY."
+    echo -e "\tserve\tServe your site locally."
+    ;;
+  help)
+    echo "${0##*/} help -- Because you're dumb"
+    echo ""
+    echo "Usage: ${0##*/} help COMMAND"
+    ;;
+  new)
+    echo "${0##*/} new -- Creates a new website scaffold in \$PWD/site_name"
+    echo ""
+    echo "Usage: ${0##*/} [options] new SITE_NAME"
+    echo ""
+    echo "new makes use of the following options:"
+    echo -e "\t-f\tForce creation even if site_name already exists"
+    ;;
+  build)
+    echo "${0##*/} build -- Build the site"
+    echo ""
+    echo "Usage: ${0##*/} build"
+    ;;
+  serve)
+    echo "${0##*/} serve -- Serve your site locally"
+    echo ""
+    echo "Usage: ${0##*/} serve"
+    echo ""
+    echo "Ruby is required in order to run the local server."
+    ;;
+  *)
+    echo "Unknown command: $1"
+    cmd_help "?"
+  esac
+}
+
+cmd_new() {
+  site_name="$1"
+  [ ! -n "$site_name" ] && fail "required parameter site_name is missing"
+  [ -f "$site_name" ] && fail "$site_name exists and is not a directory"
+  if [ -d "$site_name" ]; then
+    [ ! -n "$FORCE_OPT" ] && fail "Cowardly refusing to create a scaffold in $site_name as it already exists.
+     Use the -f, $USER!"
+  else
+    dbg_echo "Creating directory $site_name"
+    mkdir "$site_name"
+  fi
+
+  create_file "${site_name}/_config.sh" "${TEMPLATE_CONFIG_SH}"
+  create_file "${site_name}/index.html" "${TEMPLATE_INDEX_HTML}"
+  [ ! -d "$site_name/_layouts" ] && mkdir "$site_name/_layouts"
+  create_file "${site_name}/${LAYOUT_DIRNAME}/default.html" "${TEMPLATE_LAYOUTS_DEFAULT_HTML}"
+  [ ! -d "$site_name/_includes" ] && mkdir "$site_name/_includes"
+  create_file "${site_name}/${INCLUDE_DIRNAME}/header.html" "${TEMPLATE_INCLUDES_HEADER_HTML}"
+  create_file "${site_name}/${INCLUDE_DIRNAME}/footer.html" "${TEMPLATE_INCLUDES_FOOTER_HTML}"
+  
+  create_file "${site_name}/.gitignore" "_site/"
+}
+
+cmd_build() {
+  OLDIFS="${IFS}"
+  IFS="
+"
+  if [ ! -f _config.sh ]; then
+    fail "_config.sh not found."
+  fi
+
+  . ./_config.sh
+
+  defines="`site_defines`"
+
+  if [ ! -d "${OUTPUT_DIRECTORY}" ]; then
+    dbg_echo "Creating output directory ${OUTPUT_DIRECTORY}"
+    mkdir "${OUTPUT_DIRECTORY}"
+  fi
+  
+  dbg_echo "Building file lists"
+  dirs=` find -E . -type d -and -regex '(.?/[^_/]+[^/]+)*'`
+  files=`find -E . -type f -and -regex '(.?/[^_/]+[^/]+)*'`
+  for dir in ${dirs}; do
+    if [ ! -d "${OUTPUT_DIRECTORY}/${dir}" ]; then
+      dbg_echo "Creating directory ${OUTPUT_DIRECTORY}/${dir}"
+      mkdir "${OUTPUT_DIRECTORY}/${dir}"
+    fi
+  done
+  for file in ${files}; do
+    dbg_echo "--- ${file} ---"
+    unset front_matter content
+    front_matter="`read_front_matter "${file}"`"
+    if [ $? -eq 1 ]; then
+      cpp -P -I`pwd`/${INCLUDE_DIRNAME} "${defines}" "${file}" > "$OUTPUT_DIRECTORY/${file}"
+      [ $? -ne 0 ] && fail "Build failed."
+      continue
+    fi
+    read_content "${file}"
+
+    page_defines="-D\$CONTENT=\"${TMP_PATH}\""
+    for line in ${front_matter}; do
+      dbg_echo "export ${line}"
+      export "${line}"
+      page_defines="-D\$${line}
+${page_defines}"
+    done
+
+    if [ -n "${PAGE_LAYOUT}" ]; then
+      cpp -P -I`pwd`/${INCLUDE_DIRNAME} ${defines} ${page_defines} "./${LAYOUT_DIRNAME}/${PAGE_LAYOUT}" > "$OUTPUT_DIRECTORY/${file}"
+      [ $? -ne 0 ] && fail "Build failed."
+    else
+      cpp -P -I`pwd`/${INCLUDE_DIRNAME} ${defines} ${page_defines} "${TMP_PATH}" > "$OUTPUT_DIRECTORY/${file}"
+      [ $? -ne 0 ] && fail "Build failed."
+    fi
+
+    for line in ${front_matter}; do
+      dbg_echo "unset ${line}"
+      unset "${line}"
+    done
+    rm "${TMP_PATH}"
+  done
+  
+  IFS="${OLDIFS}"
+
+  echo "===> Build completed."
+}
+
+cmd_serve() {
+  port=4567
+  if which ruby >/dev/null 2>&1; then
+    ruby -rwebrick -e "
+s = WEBrick::HTTPServer.new Port: $port, DocumentRoot: \"$OUTPUT_DIRECTORY\"
+trap 'INT' do s.shutdown end
+s.start"
+    return
+  fi
+  fail "Ruby is required to run the local server."
+}
+
+# ===== END Commands 
+# ===== BEGIN Command line option processing
+
+unset DEBUG_OPT FORCE_OPT HELP_OPT
+while getopts 'dfh' COMMAND_LINE_ARGUMENT; do
+  case "${COMMAND_LINE_ARGUMENT}" in
+  d)  DEBUG_OPT=vopt ;;
+  f)  FORCE_OPT=fopt ;;
+  h)  HELP_OPT=hopt; usage 0 ;;
+  "?")  usage ;;
+  esac
+done
+shift $(( $OPTIND - 1 ))
+
+# Decide what command to run.
+COMMAND=$1
+shift
+case "${COMMAND}" in
+  help)   cmd_help "${1:-"?"}" ;;
+  new)    cmd_new $* ;;
+  build)  cmd_build $*;;
+  serve)  cmd_serve $*;;
+  *)      usage ;;
+esac
+
+# ===== END Command line option processing
+
+# kate: indent-width 2; replace-tabs true; tab-width 2;

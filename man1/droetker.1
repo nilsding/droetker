@@ -1,0 +1,73 @@
+.Dd September 23, 2015
+.Dt DROETKER 1
+.Os
+.\" ---------------------------------------------------------------------------
+.Sh NAME
+.Nm droetker
+.Nd static site generator
+.\" ---------------------------------------------------------------------------
+.Sh SYNOPSIS
+.Nm
+.Op Fl dfh
+.Ao command Ac
+.\" ---------------------------------------------------------------------------
+.Sh DESCRIPTION
+.Nm
+is a static website generator written in
+.Xr sh 1 .
+It provides a basic templating system through
+.Xr cpp 1 .
+.\" ---------------------------------------------------------------------------
+.Sh OPTIONS
+The following options are supported by
+.Nm :
+.Bl -tag -width indent
+.It Fl d
+Display additional information.
+.It Fl f
+Force stuff.
+.It Fl h
+Display a small help text, which might not help you at all as it refers you to
+the
+.Fl help
+command.  You are better off by using that one.
+.\" ---------------------------------------------------------------------------
+.Sh COMMANDS
+The following commands are supported by
+.Nm :
+.Bl -tag -width indent
+.It Ic help
+Display usage information and a list of commands.
+.It Ic new Ar site_name
+Create a new website scaffold in
+.Pa PWD/site_name .
+.It Ic build
+Build the site in
+.Li OUTPUT_DIRECTORY .
+If
+.Li OUTPUT_DIRECTORY
+is not set, the site is built in
+.Pa PWD/_site .
+.Pp
+If
+.Nm
+can not find the configuration file
+.Pa PWD/_config.sh ,
+it does not attempt to build the site.
+.Pp
+The output directory will not be deleted if it already exists.
+.It Ic serve
+Serves your site locally.  This command requires Ruby to run.
+.El
+.\" ---------------------------------------------------------------------------
+.Sh FILES
+.Bl -tag -width "_config.sh__" -compact
+.It Pa _config.sh
+The configuration file for a site.  If this file is not in PWD,
+.Nm
+refuses to build the site.
+.El
+.\" ---------------------------------------------------------------------------
+.Sh BUGS
+Yes.
+.Pp

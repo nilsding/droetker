@@ -1,0 +1,46 @@
+NAME
+     droetker -- static site generator
+
+SYNOPSIS
+     droetker [-dfh] <command>
+
+DESCRIPTION
+     droetker is a static website generator written in sh(1).  It provides a
+     basic templating system through cpp(1).
+
+OPTIONS
+     The following options are supported by droetker:
+
+     -d      Display additional information.
+
+     -f      Force stuff.
+
+     -h      Display a small help text, which might not help you at all as it
+             refers you to the -help command.  You are better off by using
+             that one.
+
+COMMANDS
+     The following commands are supported by droetker:
+
+     help    Display usage information and a list of commands.
+
+     new site_name
+             Create a new website scaffold in PWD/site_name.
+
+     build   Build the site in OUTPUT_DIRECTORY.  If OUTPUT_DIRECTORY is not
+             set, the site is built in PWD/_site.
+
+             If droetker can not find the configuration file PWD/_config.sh,
+             it does not attempt to build the site.
+
+             The output directory will not be deleted if it already exists.
+
+     serve   Serves your site locally.  This command requires Ruby to run.
+
+FILES
+     _config.sh    The configuration file for a site.  If this file is not in
+                   PWD, droetker refuses to build the site.
+
+BUGS
+     Yes.
+
