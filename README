@@ -37,6 +37,37 @@ COMMANDS
 
      serve   Serves your site locally.  This command requires Ruby to run.
 
+FRONT MATTER
+     droetker allows per-page configuration using the front matter.  The front
+     matter consists of key/value pairs, which look like this:
+
+           ---
+           PAGE_LAYOUT=default.html
+           PAGE_PREPROCESSOR=redcarpet
+           ---
+
+     Note the triple dashes at the begin and end of the key/value pairs.
+     These are required, otherwise droetker will not attempt to process the
+     file with cpp(1).
+
+     Every value is accessible anywhere in the page with $KEY.
+
+     There are some special keys that droetker makes use of.  These are:
+
+     PAGE_LAYOUT
+             The to be used layout.  The layouts are usually located in the
+             _layouts subdirectory.
+
+     PAGE_PREPROCESSOR
+             Preprocess the page using the given preprocessor.  droetker will
+             run the preprocessor like this:
+
+                   echo content | $PAGE_PREPROCESSOR
+
+     PAGE_PREPROCESSOR_ARGS
+             Run the preprocessor with the given arguments.  It overrides
+             SITE_PREPROCESSOR_ARGS.
+
 FILES
      _config.sh    The configuration file for a site.  If this file is not in
                    PWD, droetker refuses to build the site.

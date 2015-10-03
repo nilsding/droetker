@@ -1,4 +1,4 @@
-.Dd September 23, 2015
+.Dd October 3, 2015
 .Dt DROETKER 1
 .Os
 .\" ---------------------------------------------------------------------------
@@ -31,6 +31,7 @@ Display a small help text, which might not help you at all as it refers you to
 the
 .Fl help
 command.  You are better off by using that one.
+.El
 .\" ---------------------------------------------------------------------------
 .Sh COMMANDS
 The following commands are supported by
@@ -58,6 +59,44 @@ it does not attempt to build the site.
 The output directory will not be deleted if it already exists.
 .It Ic serve
 Serves your site locally.  This command requires Ruby to run.
+.El
+.\" ---------------------------------------------------------------------------
+.Sh FRONT MATTER
+.Nm
+allows per-page configuration using the front matter.  The front matter
+consists of key/value pairs, which look like this:
+.Pp
+.Dl ---
+.Dl PAGE_LAYOUT=default.html
+.Dl PAGE_PREPROCESSOR=redcarpet
+.Dl ---
+.Pp
+Note the triple dashes at the begin and end of the key/value pairs.  These are
+required, otherwise
+.Nm
+will not attempt to process the file with
+.Xr cpp 1 .
+.Pp
+Every value is accessible anywhere in the page with
+.Pa $KEY .
+.Pp
+There are some special keys that
+.Nm
+makes use of.  These are:
+.Bl -tag -width indent
+.It Ic PAGE_LAYOUT
+The to be used layout.  The layouts are usually located in the
+.Pa _layouts
+subdirectory.
+.It Ic PAGE_PREPROCESSOR
+Preprocess the page using the given preprocessor.
+.Nm
+will run the preprocessor like this:
+.Pp
+.Dl echo "content" | $PAGE_PREPROCESSOR
+.It Ic PAGE_PREPROCESSOR_ARGS
+Run the preprocessor with the given arguments.  It overrides
+.Pa SITE_PREPROCESSOR_ARGS .
 .El
 .\" ---------------------------------------------------------------------------
 .Sh FILES

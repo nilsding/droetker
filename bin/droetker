@@ -44,6 +44,13 @@ export SITE_NAME=\"My awesome web site\"
 export SITE_DESCRIPTION=\"You should change the description.\"
 export SITE_BASEURL=\"\"  # the subpath of your site, e.g. /blog
 export SITE_URL=\"http://yourdomain.com\"
+
+# The default arguments sent to the preprocessor.  For example, if you're
+# using Redcarpet for preprocessing, you may uncomment the next line to
+# parse highlights (i.e. '==this==' becomes '<mark>this</mark>').
+#export SITE_PREPROCESSOR_ARGS=\"--parse highlight\"
+# Make sure you've added PAGE_PREPROCESSOR=redcarpet to the front matter of
+# the page you want to send to the preprocessor.
 "
 
 TEMPLATE_INDEX_HTML="---
@@ -296,18 +303,19 @@ cmd_build() {
       mkdir "${OUTPUT_DIRECTORY}/${dir}"
     fi
   done
+  
   for file in ${files}; do
     dbg_echo "--- ${file} ---"
     unset front_matter content
     front_matter="`read_front_matter "${file}"`"
     if [ $? -eq 1 ]; then
-      cpp -P -I`pwd`/${INCLUDE_DIRNAME} "${defines}" "${file}" > "$OUTPUT_DIRECTORY/${file}"
+      cat "${file}" > "$OUTPUT_DIRECTORY/${file}"
       [ $? -ne 0 ] && fail "Build failed."
       continue
     fi
     read_content "${file}"
 
-    page_defines="-D\$CONTENT=\"${TMP_PATH}\""
+    page_defines=""
     for line in ${front_matter}; do
       dbg_echo "export ${line}"
       export "${line}"
@@ -315,6 +323,30 @@ cmd_build() {
 ${page_defines}"
     done
 
+    # Preprocess the file.
+    dbg_echo "preprocess"
+    if [ -n "${PAGE_PREPROCESSOR}" ]; then
+      _IFS="${IFS}"
+      IFS="${OLDIFS}"
+
+      pp_args="${SITE_PREPROCESSOR_ARGS}"
+      if [ -n "${PAGE_PREPROCESSOR_ARGS}" ]; then
+        pp_args="${PAGE_PREPROCESSOR_ARGS}"
+      fi
+
+      cat "${TMP_PATH}" | ${PAGE_PREPROCESSOR} ${pp_args} > "${TMP_PATH}.pp"
+      [ $? -ne 0 ] && fail "Build failed."
+
+      IFS="${_IFS}"
+      page_defines="-D\$CONTENT=\"${TMP_PATH}.pp\"
+${page_defines}"
+    else
+      page_defines="-D\$CONTENT=\"${TMP_PATH}\"
+${page_defines}"
+    fi
+
+    # Build the page.
+    dbg_echo "build"
     if [ -n "${PAGE_LAYOUT}" ]; then
       cpp -P -I`pwd`/${INCLUDE_DIRNAME} ${defines} ${page_defines} "./${LAYOUT_DIRNAME}/${PAGE_LAYOUT}" > "$OUTPUT_DIRECTORY/${file}"
       [ $? -ne 0 ] && fail "Build failed."
@@ -327,9 +359,10 @@ ${page_defines}"
       dbg_echo "unset ${line}"
       unset "${line}"
     done
-    rm "${TMP_PATH}"
+    rm -f "${TMP_PATH}"
+    rm -f "${TMP_PATH}.pp"
   done
-  
+
   IFS="${OLDIFS}"
 
   echo "===> Build completed."
